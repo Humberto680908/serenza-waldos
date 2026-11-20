@@ -92,6 +92,7 @@ h2{font-size:clamp(28px,4.2vw,52px)}
 .dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1.5px solid transparent;transition:.25s}
 .dot.on::after{border-color:var(--ink)}
 .dot:hover{transform:scale(1.06)}
+.dots.mini{gap:10px}.dots.mini .dot{width:30px;height:30px}
 .aname{font-family:var(--serif);font-size:clamp(30px,3.6vw,46px);font-weight:300;margin-top:26px}
 .adesc{font-size:14px;color:var(--soft);margin-top:6px}
 .stage{display:flex;align-items:flex-end;justify-content:center;gap:2vw;height:min(58vh,560px)}
@@ -173,6 +174,12 @@ tr.sec td{font-size:10px;letter-spacing:.22em;text-transform:uppercase;border-bo
   #printout h1{font-size:26px;margin-bottom:6px} #printout table td,#printout table th{font-size:11px;padding:6px 0}
 }
 
+.pulse{animation:pulse 1.6s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(181,50,31,.55)}70%{box-shadow:0 0 0 14px rgba(181,50,31,0)}100%{box-shadow:0 0 0 0 rgba(181,50,31,0)}}
+.dot.pulse{animation:pulse 1.6s ease-out infinite}
+.spin.pulse{animation:none}.spin.pulse .ring{border-color:#B5321F;animation:ringp 1.6s ease-in-out infinite}
+@keyframes ringp{50%{opacity:.25}}
+.drag.pulse{animation:none;color:#B5321F}
 /* responsive */
 @media (max-width:860px){
   .hero,.brand,.lines,.aromas,.viewer,.ficha,.appr{grid-template-columns:1fr}
@@ -265,10 +272,11 @@ tr.sec td{font-size:10px;letter-spacing:.22em;text-transform:uppercase;border-bo
     <div class="spin" id="spin"><img id="spinimg" alt="Crema corporal Rosas, vista 360°"><div class="ring"></div></div>
     <div>
       <div class="rule"></div>
-      <div class="kick">Crema corporal <b>Rosas</b> · vista 360°</div>
+      <div class="kick" id="spinkick">Crema corporal <b>Rosas</b> · vista 360°</div>
       <h2>Deslice para girar la botella.</h2>
+      <div class="dots mini" id="dots360" style="margin-top:22px"></div>
       <div class="drag"><svg viewBox="0 0 40 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h36M6 4 2 8l4 4M34 4l4 4-4 4"/></svg> Arrastre a la izquierda o a la derecha</div>
-      <div class="toggle" id="size"><button class="on" data-s="1L">1 L</button><button data-s="500">500 ml</button></div>
+      <div class="toggle" id="size"><button class="on" data-s="1L">1 L</button><button data-s="500ml">500 ml</button></div>
       <p class="lead" id="sizeTxt">1 L · rinde más, mejor costo por mililitro.</p>
     </div>
   </div>
@@ -400,6 +408,29 @@ document.addEventListener('keydown',e=>{if(document.getElementById('gate').class
 document.getElementById('start').onclick=()=>{document.getElementById('gate').classList.add('off');go(0)};
 const hm=location.hash.match(/^#s(\d)$/);if(hm){document.getElementById('gate').classList.add('off');setTimeout(()=>go(+hm[1]),0)}
 
+
+/* ---------- pulso: indica dónde tocar; se apaga al primer uso ---------- */
+const used=new Set();
+function hint(el,key){if(!el||used.has(key))return;el.classList.add('pulse');el.addEventListener('pointerdown',()=>{used.add(key);el.classList.remove('pulse')},{once:true})}
+function hintGroup(els,key){if(used.has(key))return;els.forEach(e=>e.classList.add('pulse'));els.forEach(e=>e.addEventListener('pointerdown',()=>{used.add(key);els.forEach(x=>x.classList.remove('pulse'))},{once:true}))}
+hint(document.getElementById('start'),'start');
+const nextBtn=document.getElementById('next');
+nextBtn.addEventListener('pointerdown',()=>nextBtn.classList.remove('pulse'));
+const SCENE_HINTS={
+  s3:()=>{hintGroup([...document.querySelectorAll('#dotsC .dot,#dotsS .dot')],'dots');hint(document.getElementById('go360'),'go360')},
+  s4:()=>{hint(spin,'spin');hint(document.querySelector('#s4 .drag'),'spin');hintGroup([...document.querySelectorAll('#size button')],'size')},
+  s5:()=>hintGroup([...document.querySelectorAll('#fsize button')],'fsize'),
+  s6:()=>hint(document.getElementById('auto'),'auto'),
+  s7:()=>{hint(document.getElementById('all'),'all');hint(document.getElementById('confirm'),'confirm')},
+};
+const _go=go;
+go=function(n){_go(n);nextBtn.classList.remove('pulse');const s=scenes[idx];
+  (SCENE_HINTS[s.id]||(()=>{}))();
+  // el botón siguiente pulsa cuando termina la narración (o a los 6 s sin audio)
+  const t=setTimeout(()=>{if(scenes[idx]===s&&idx<scenes.length-1)nextBtn.classList.add('pulse')},muted?2500:9000);
+  if(cur){cur.addEventListener('ended',()=>{clearTimeout(t);if(scenes[idx]===s&&idx<scenes.length-1)nextBtn.classList.add('pulse')},{once:true})}
+};
+
 /* ---------- aromas ---------- */
 let sel=SKU[0], fs='1L';
 function dotRow(el,line){SKU.filter(s=>s.l===line).forEach(s=>{const b=document.createElement('button');b.className='dot';b.style.background=s.c;b.title=s.n;b.setAttribute('aria-label',s.n);b.onclick=()=>pick(s,true);b.dataset.k=s.k;el.appendChild(b)})}
@@ -413,21 +444,31 @@ function pick(s,speak){
   a1.style.opacity=a5.style.opacity=0;
   setTimeout(()=>{a1.src=img(s,'1L');a5.src=img(s,'500ml');a1.alt=`${LINE[s.l].p} ${s.n} 1 L`;a5.alt=`${LINE[s.l].p} ${s.n} 500 ml`;a1.style.opacity=a5.style.opacity=1},200);
   const g=document.getElementById('go360');
-  g.textContent=s.k==='rosas'?'Ver en 360° →':'Ver ficha técnica →';
   if(speak) say(s.a);
-  renderFicha();
+  renderFicha(); if(window.__r360) show360();
 }
-document.getElementById('go360').onclick=()=>go(sel.k==='rosas'?4:5);
+document.getElementById('go360').onclick=()=>go(4);
 pick(SKU[0],false);
 
 /* ---------- 360 ---------- */
-const N=36; let frame=0, size='1L', loaded=false;
+const N=36; let frame=0, size='1L';
 const spinImg=document.getElementById('spinimg'), spin=document.getElementById('spin');
-const dir=()=>`${A}360/rosas-${size==='1L'?'1l':'500'}/`;
+const dir=(s=sel,t=size)=>`${A}360/${s.l}_${s.k}_${t}/`;
 const fsrc=k=>`${dir()}f${String(k).padStart(2,'0')}.jpg`;
-function preload360(){if(loaded)return;loaded=true;['1l','500'].forEach(d=>{for(let k=0;k<N;k++){const i=new Image();i.src=`${A}360/rosas-${d}/f${String(k).padStart(2,'0')}.jpg`}});intro()}
+const cache=new Set();
+function preload(s,t){const key=s.k+t;if(cache.has(key))return;cache.add(key);for(let k=0;k<N;k++){const i=new Image();i.src=`${dir(s,t)}f${String(k).padStart(2,'0')}.jpg`}}
+function preload360(){preload(sel,'1L');preload(sel,'500ml');intro()}
 function show(){spinImg.src=fsrc(frame)}
-show();
+function show360(){
+  const L=LINE[sel.l];
+  document.getElementById('spinkick').innerHTML=`${L.p} <b>${sel.n}</b> · vista 360°`;
+  spinImg.alt=`${L.p} ${sel.n}, vista 360°`;
+  document.querySelectorAll('#dots360 .dot').forEach(d=>d.classList.toggle('on',d.dataset.k===sel.k));
+  if(scenes[idx]&&scenes[idx].id==='s4'){preload(sel,'1L');preload(sel,'500ml')}
+  show();
+}
+SKU.forEach(s=>{const b=document.createElement('button');b.className='dot';b.style.background=s.c;b.title=s.n;b.setAttribute('aria-label',s.n);b.dataset.k=s.k;b.onclick=()=>{pick(s,true);intro()};document.getElementById('dots360').appendChild(b)});
+window.__r360=true; show360();
 let drag=null;
 spin.addEventListener('pointerdown',e=>{drag={x:e.clientX,f:frame};spin.setPointerCapture(e.pointerId);stopIntro()});
 spin.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x;frame=((drag.f-Math.round(dx/9))%N+N)%N;show()});
@@ -435,10 +476,10 @@ spin.addEventListener('pointerup',()=>drag=null);spin.addEventListener('pointerc
 let introT=null;
 function intro(){let k=0;stopIntro();introT=setInterval(()=>{frame=(frame+1)%N;show();if(++k>=N)stopIntro()},55)}
 function stopIntro(){if(introT){clearInterval(introT);introT=null}}
-const SIZE_TXT={'1L':'1 L · rinde más, mejor costo por mililitro.','500':'500 ml · precio de entrada para probar el aroma.'};
+const SIZE_TXT={'1L':'1 L · rinde más, mejor costo por mililitro.','500ml':'500 ml · precio de entrada para probar el aroma.'};
 document.querySelectorAll('#size button').forEach(b=>b.onclick=()=>{
   size=b.dataset.s;document.querySelectorAll('#size button').forEach(x=>x.classList.toggle('on',x===b));
-  spin.classList.toggle('small',size==='500');show();document.getElementById('sizeTxt').textContent=SIZE_TXT[size];
+  spin.classList.toggle('small',size==='500ml');show();document.getElementById('sizeTxt').textContent=SIZE_TXT[size];
   if(!played.has('06')){played.add('06');say('06_tamanos')}
 });
 
